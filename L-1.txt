@@ -1,0 +1,72 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        printf("Использование: %s <файл1> <файл2>\n", argv[0]);
+        return 1;
+    }
+
+    // Открываем файлы для сравнения
+    int fd1 = open(argv[1], O_RDONLY);
+    int fd2 = open(argv[2], O_RDONLY);
+
+    if (fd1 == -1 || fd2 == -1) {
+        perror("Ошибка открытия файлов");
+        return 1;
+    }
+
+    // Получаем размеры файлов
+    off_t size1 = lseek(fd1, 0, SEEK_END);
+    off_t size2 = lseek(fd2, 0, SEEK_END);
+
+    if (size1 == -1 || size2 == -1) {
+        perror("Ошибка получения размеров файлов");
+        close(fd1);
+        close(fd2);
+        return 1;
+    }
+
+    printf("Размеры файлов:\n");
+    printf("\t%s\t%lld bytes\n", argv[1], (long long)size1);
+    printf("\t%s\t%lld bytes\n", argv[2], (long long)size2);
+
+    // Сравниваем файлы побайтово
+    off_t offset = 0;
+    int diff_count = 0;
+    char byte1, byte2;
+
+    while (offset < size1 && offset < size2) {
+        if (lseek(fd1, offset, SEEK_SET) == -1 || lseek(fd2, offset, SEEK_SET) == -1) {
+            perror("Ошибка установки позиции в файлах");
+            close(fd1);
+            close(fd2);
+            return 1;
+        }
+
+        if (read(fd1, &byte1, 1) != 1 || read(fd2, &byte2, 1) != 1) {
+            perror("Ошибка чтения файлов");
+            close(fd1);
+            close(fd2);
+            return 1;
+        }
+
+        if (byte1 != byte2) {
+            printf("Различие в файлах:\n\tв %lld байте;\n", (long long)offset);
+            diff_count++;
+        }
+
+        offset++;
+    }
+
+    printf("Всего выявлено различий:\n\t%d\n", diff_count);
+
+    close(fd1);
+    close(fd2);
+
+    return 0;
+}
+//./bin_diff <файл1> <файл2>
