@@ -1,0 +1,91 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+int main(int argc, char *argv[]) {
+    if (argc != 2 && argc != 3) {
+        printf("Использование: %s [-t] <имя_исходного_файла>\n", argv[0]);
+        return 1;
+    }
+
+    int diagnostic_mode = 0;
+    char *filename = argv[1];
+
+    if (argc == 3 && strcmp(argv[1], "-t") == 0) {
+        diagnostic_mode = 1;
+        filename = argv[2];
+    }
+
+    // Открываем исходный файл для чтения
+    int source_fd = open(filename, O_RDONLY);
+    if (source_fd == -1) {
+        perror("Ошибка открытия исходного файла");
+        return 1;
+    }
+
+    struct stat file_stat;
+    if (fstat(source_fd, &file_stat) == -1) {
+        perror("Ошибка получения информации об исходном файле");
+        close(source_fd);
+        return 1;
+    }
+
+    // Определяем размер данных, хранящихся в файле
+    off_t data_size = 0;
+    char buffer[1024];
+    ssize_t bytes_read;
+
+    while ((bytes_read = read(source_fd, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t i = 0; i < bytes_read; i++) {
+            if (buffer[i] != 0) {
+                data_size = lseek(source_fd, 0, SEEK_CUR);
+            }
+        }
+    }
+
+    if (bytes_read == -1) {
+        perror("Ошибка чтения исходного файла");
+        close(source_fd);
+        return 1;
+    }
+
+    if (diagnostic_mode) {
+        printf("Байт отсечения: 0x%llx.\n", (long long)data_size);
+    } else {
+        // Создаем новый файл с усеченными данными
+        char new_filename[PATH_MAX];
+        snprintf(new_filename, sizeof(new_filename), "%s~trunc", filename);
+
+        int result_fd = open(new_filename, O_WRONLY | O_CREAT | O_TRUNC, file_stat.st_mode);
+        if (result_fd == -1) {
+            perror("Ошибка создания результирующего файла");
+            close(source_fd);
+            return 1;
+        }
+
+        // Копируем данные в новый файл
+        lseek(source_fd, 0, SEEK_SET);
+        while ((bytes_read = read(source_fd, buffer, sizeof(buffer))) > 0) {
+            if (write(result_fd, buffer, bytes_read) == -1) {
+                perror("Ошибка записи в результирующий файл");
+                close(source_fd);
+                close(result_fd);
+                unlink(new_filename); // Удаляем новый файл, чтобы избежать ошибки
+                return 1;
+            }
+        }
+
+        printf("Байт отсечения: 0x%llx.\n", (long long)data_size);
+        printf("Создан файл: %s\n", new_filename);
+
+        close(result_fd);
+    }
+
+    close(source_fd);
+
+    return 0;
+}
+//создается новый файл с именем <имя_исходного_файла>~trunc
