@@ -1,0 +1,54 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        printf("Использование: %s <исходный_файл> <результирующий_файл>\n", argv[0]);
+        return 1;
+    }
+
+    int source_fd = open(argv[1], O_RDONLY);
+    if (source_fd == -1) {
+        perror("Ошибка открытия исходного файла");
+        return 1;
+    }
+
+    struct stat file_stat;
+    if (fstat(source_fd, &file_stat) == -1) {
+        perror("Ошибка получения информации об исходном файле");
+        close(source_fd);
+        return 1;
+    }
+
+    int result_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, file_stat.st_mode);
+    if (result_fd == -1) {
+        perror("Ошибка открытия результирующего файла");
+        close(source_fd);
+        return 1;
+    }
+
+    char buffer[1024];
+    ssize_t bytes_read, bytes_written;
+
+    while ((bytes_read = read(source_fd, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t i = bytes_read - 1; i >= 0; i--) {
+            if ((bytes_written = write(result_fd, &buffer[i], 1)) == -1) {
+                perror("Ошибка записи в результирующий файл");
+                close(source_fd);
+                close(result_fd);
+                return 1;
+            }
+        }
+    }
+
+    close(source_fd);
+    close(result_fd);
+
+    printf("Файл успешно скопирован в обратном порядке.\n");
+    return 0;
+}
+//./реверсное_копирование_файла <исходный_файл> <результирующий_файл>
